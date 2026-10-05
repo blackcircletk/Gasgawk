@@ -1,0 +1,12 @@
+{
+  "name": "gasgawk",
+  "version": "1.0.0",
+  "description": "Gas price finder between two locations",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  }
+}
