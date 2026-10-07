@@ -475,9 +475,10 @@
         zoomControl: true
       }).setView([43.6532, -79.3832], 9);
 
-      L.tileLayer('https://tiles.openfreemap.org/styles/liberty/{z}/{x}/{y}.png', {
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors, tiles by OpenFreeMap'
+        subdomains: 'abcd',
+        attribution: '&copy; OpenStreetMap contributors, &copy; CARTO'
       }).addTo(map);
 
       routeLayer = L.polyline([], {
