@@ -475,9 +475,9 @@
         zoomControl: true
       }).setView([43.6532, -79.3832], 9);
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      L.tileLayer('https://tiles.openfreemap.org/styles/liberty/{z}/{x}/{y}.png', {
         maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; OpenStreetMap contributors, tiles by OpenFreeMap'
       }).addTo(map);
 
       routeLayer = L.polyline([], {
