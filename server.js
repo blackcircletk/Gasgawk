@@ -373,11 +373,9 @@ app.post('/api/fuel-along-route', async (req, res) => {
     const routeCoords = route.geometry.coordinates;
     const samples = sampleRouteByDistance(routeCoords, Number(sampleKm) || 7);
 
-    const rawStations = await fetchFuelBatched(samples, 3);
-
-    if (!rawStations.length && !COLLECTAPI_TOKEN) {
-      return res.status(500).json({ error: 'COLLECTAPI_TOKEN is not configured on the server. Add it as an environment variable.' });
-    }
+    const rawStations = COLLECTAPI_TOKEN
+      ? await fetchFuelBatched(samples, 3)
+      : [];
 
     const deduped = dedupeStations(rawStations);
     const projected = deduped
@@ -394,6 +392,9 @@ app.post('/api/fuel-along-route', async (req, res) => {
     };
 
     res.json({
+      warning: COLLECTAPI_TOKEN
+        ? null
+        : 'COLLECTAPI_TOKEN is not configured on the server — showing the route only, without station prices.',
       origin: start,
       destination: end,
       route: {

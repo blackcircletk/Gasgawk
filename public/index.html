@@ -671,7 +671,11 @@
         renderTable(data);
         renderChart(data);
 
-        els.status.textContent = `Loaded ${data.stations.length} stations from ${payload.origin} to ${payload.destination}.`;
+        if (data.warning) {
+          els.status.textContent = data.warning;
+        } else {
+          els.status.textContent = `Loaded ${data.stations.length} stations from ${payload.origin} to ${payload.destination}.`;
+        }
       } catch (err) {
         els.error.textContent = err.message;
         els.status.textContent = '';
