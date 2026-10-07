@@ -180,7 +180,10 @@ async function fetchFuelFromCoordinates(lat, lng) {
 
   const res = await fetch(url, {
     headers: {
-      Authorization: COLLECTAPI_TOKEN,
+      // CollectAPI expects "apikey <token>"; keep raw value if it already has a scheme
+      Authorization: COLLECTAPI_TOKEN.includes(' ')
+        ? COLLECTAPI_TOKEN
+        : `apikey ${COLLECTAPI_TOKEN}`,
       'Content-Type': 'application/json'
     }
   });
