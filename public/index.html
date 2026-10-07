@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>GasGawk — Fuel Prices Along Route</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    :root {
+      --bg: #f7f6f2;
+      --surface: #ffffff;
+      --surface-2: #f3f0ec;
+      --text: #222;
+      --muted: #666;
+      --border: #d8d8d8;
+      --primary: #01696f;
+      --primary-2: #0c4e54;
+      --radius: 14px;
+      --shadow: 0 10px 30px rgba(0,0,0,0.08);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 32px;
+    }
+    p.lead {
+      margin: 0 0 24px;
+      color: var(--muted);
+    }
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 18px;
+      margin-bottom: 20px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.2fr 1.2fr 0.6fr 0.6fr auto;
+      gap: 12px;
+      align-items: end;
+    }
+    .field label {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 6px;
+      color: var(--muted);
+    }
+    .field input, .field select {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #fff;
+      font-size: 15px;
+    }
+    button {
+      border: none;
+      background: var(--primary);
+      color: white;
+      padding: 12px 18px;
+      border-radius: 10px;
+      font-size: 15px;
+      cursor: pointer;
+    }
+    button:hover { background: var(--primary-2); }
+    button:disabled { opacity: 0.6; cursor: wait; }
+    .stats {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    .stat {
+      background: var(--surface-2);
+      border-radius: 12px;
+      padding: 12px 14px;
+      min-width: 180px;
+    }
+    .stat .k {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
+    .stat .v {
+      font-size: 20px;
+      font-weight: 700;
+    }
+    .table-wrap {
+      overflow: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 14px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid #ececec;
+      vertical-align: top;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      background: #fcfcfc;
+      position: sticky;
+      top: 0;
+    }
+    .error {
+      color: #b00020;
+      margin-top: 10px;
+      font-size: 14px;
+    }
+    .loading {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 10px;
+    }
+    #map {
+      width: 100%;
+      height: 460px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+    #chart {
+      width: 100%;
+      height: 430px;
+    }
+    .station-marker-wrap {
+      background: transparent;
+      border: none;
+    }
+    .station-pin {
+      position: relative;
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50% 50% 50% 0;
+      transform: rotate(-45deg);
+      border: 2px solid #ffffff;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+    }
+    .station-pin::after {
+      content: "";
+      position: absolute;
+      inset: 6px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.14);
+    }
+    .station-pin svg {
+      width: 16px;
+      height: 16px;
+      transform: rotate(45deg);
+      position: relative;
+      z-index: 1;
+      stroke: #ffffff;
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .station-pin.price-low { background: #2e7d32; }
+    .station-pin.price-mid { background: #ef6c00; }
+    .station-pin.price-high { background: #c62828; }
+    .station-price-chip {
+      position: absolute;
+      top: -10px;
+      left: 28px;
+      background: #111;
+      color: #fff;
+      font-size: 11px;
+      line-height: 1;
+      padding: 5px 7px;
+      border-radius: 999px;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.18);
+    }
+    .price-legend {
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid #d8d8d8;
+      border-radius: 12px;
+      padding: 10px 12px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+      color: #222;
+      min-width: 150px;
+    }
+    .price-legend h4 {
+      margin: 0 0 8px;
+      font-size: 13px;
+      line-height: 1.2;
+    }
+    .price-legend .legend-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      margin: 6px 0;
+    }
+    .price-legend .legend-swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      display: inline-block;
+      flex: 0 0 12px;
+    }
+    .price-legend .legend-swatch.low { background: #2e7d32; }
+    .price-legend .legend-swatch.mid { background: #ef6c00; }
+    .price-legend .legend-swatch.high { background: #c62828; }
+    .price-legend .legend-note {
+      margin-top: 8px;
+      font-size: 11px;
+      color: #666;
+      line-height: 1.35;
+    }
+    @media (max-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+      button {
+        width: 100%;
+      }
+      #map {
+        height: 360px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>GasGawk</h1>
+    <p class="lead">Enter two locations, sample fuel stations along the route, and see the route, stations, and prices.</p>
+
+    <div class="panel">
+      <div class="grid">
+        <div class="field">
+          <label for="origin">Origin</label>
+          <input id="origin" value="Toronto, ON" />
+        </div>
+        <div class="field">
+          <label for="destination">Destination</label>
+          <input id="destination" value="Hamilton, ON" />
+        </div>
+        <div class="field">
+          <label for="sampleKm">Sample every</label>
+          <input id="sampleKm" type="number" min="1" step="1" value="7" />
+        </div>
+        <div class="field">
+          <label for="fuelType">Fuel type</label>
+          <select id="fuelType">
+            <option value="gasoline" selected>Gasoline</option>
+            <option value="diesel">Diesel</option>
+            <option value="lpg">LPG</option>
+          </select>
+        </div>
+        <div class="field">
+          <button id="runBtn">Load prices</button>
+        </div>
+      </div>
+      <div id="status" class="loading"></div>
+      <div id="error" class="error"></div>
+    </div>
+
+    <div class="panel">
+      <div class="stats" id="stats"></div>
+    </div>
+
+    <div class="panel">
+      <div id="map"></div>
+    </div>
+
+    <div class="panel">
+      <div id="chart"></div>
+    </div>
+
+    <div class="panel table-wrap">
+      <table id="resultsTable">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Station</th>
+            <th>Brand</th>
+            <th>Distance from start (km)</th>
+            <th>Distance from route (m)</th>
+            <th>Gasoline</th>
+            <th>Diesel</th>
+            <th>LPG</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const els = {
+      origin: document.getElementById('origin'),
+      destination: document.getElementById('destination'),
+      sampleKm: document.getElementById('sampleKm'),
+      fuelType: document.getElementById('fuelType'),
+      runBtn: document.getElementById('runBtn'),
+      status: document.getElementById('status'),
+      error: document.getElementById('error'),
+      stats: document.getElementById('stats'),
+      tableBody: document.querySelector('#resultsTable tbody'),
+      chart: document.getElementById('chart')
+    };
+
+    let map;
+    let routeLayer;
+    let stationLayer;
+    let startMarker;
+    let endMarker;
+    let legendControl;
+
+    function fmtNum(value, digits = 2) {
+      if (value == null || Number.isNaN(value)) return '-';
+      return Number(value).toLocaleString(undefined, {
+        minimumFractionDigits: digits,
+        maximumFractionDigits: digits
+      });
+    }
+
+    function fmtInt(value) {
+      if (value == null || Number.isNaN(value)) return '-';
+      return Math.round(value).toLocaleString();
+    }
+
+    function formatDuration(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.round((seconds % 3600) / 60);
+      if (h > 0) return `${h}h ${m}m`;
+      return `${m} min`;
+    }
+
+    function getPriceTier(value, min, max) {
+      if (value == null || min == null || max == null) return 'price-mid';
+      if (max === min) return 'price-mid';
+
+      const range = max - min;
+      const lowCutoff = min + range / 3;
+      const highCutoff = min + (2 * range) / 3;
+
+      if (value <= lowCutoff) return 'price-low';
+      if (value <= highCutoff) return 'price-mid';
+      return 'price-high';
+    }
+
+    function getTierLabel(tier) {
+      if (tier === 'price-low') return 'Low';
+      if (tier === 'price-high') return 'High';
+      return 'Mid';
+    }
+
+    function createStationIcon(price, minPrice, maxPrice) {
+      const tier = getPriceTier(price, minPrice, maxPrice);
+      const tierLabel = getTierLabel(tier);
+      const label = price == null ? 'N/A' : fmtNum(price, 3);
+
+      return L.divIcon({
+        className: 'station-marker-wrap',
+        html: `
+          <div class="station-pin ${tier}" title="${tierLabel} price tier">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M8 20v-8a2 2 0 0 1 2-2h4"></path>
+              <path d="M14 20v-5"></path>
+              <path d="M14 7h2a2 2 0 0 1 2 2v11"></path>
+              <path d="M8 6h6v6H8z"></path>
+              <path d="M16 10l2-2"></path>
+            </svg>
+            <div class="station-price-chip">${label}</div>
+          </div>
+        `,
+        iconSize: [64, 44],
+        iconAnchor: [17, 34],
+        popupAnchor: [12, -30]
+      });
+    }
+
+    function createEndpointIcon(label, color) {
+      return L.divIcon({
+        className: 'station-marker-wrap',
+        html: `
+          <div class="station-pin" style="background:${color};">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2v20"></path>
+              <path d="M12 3h7l-2 4 2 4h-7"></path>
+            </svg>
+            <div class="station-price-chip">${label}</div>
+          </div>
+        `,
+        iconSize: [64, 44],
+        iconAnchor: [17, 34],
+        popupAnchor: [12, -30]
+      });
+    }
+
+    function buildLegendHtml(minPrice, maxPrice) {
+      if (minPrice == null || maxPrice == null) {
+        return `
+          <h4>Price tiers</h4>
+          <div class="legend-row"><span class="legend-swatch low"></span><span>Low price</span></div>
+          <div class="legend-row"><span class="legend-swatch mid"></span><span>Mid price</span></div>
+          <div class="legend-row"><span class="legend-swatch high"></span><span>High price</span></div>
+          <div class="legend-note">No price range available yet.</div>
+        `;
+      }
+
+      const range = maxPrice - minPrice;
+      const lowCutoff = minPrice + range / 3;
+      const highCutoff = minPrice + (2 * range) / 3;
+
+      return `
+        <h4>Price tiers</h4>
+        <div class="legend-row">
+          <span class="legend-swatch low"></span>
+          <span>Low: ${fmtNum(minPrice, 3)} to ${fmtNum(lowCutoff, 3)}</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-swatch mid"></span>
+          <span>Mid: ${fmtNum(lowCutoff, 3)} to ${fmtNum(highCutoff, 3)}</span>
+        </div>
+        <div class="legend-row">
+          <span class="legend-swatch high"></span>
+          <span>High: ${fmtNum(highCutoff, 3)} to ${fmtNum(maxPrice, 3)}</span>
+        </div>
+        <div class="legend-note">Tiers are calculated from the current visible price range for the selected fuel type.</div>
+      `;
+    }
+
+    function initLegend() {
+      if (legendControl || !map) return;
+
+      legendControl = L.control({ position: 'bottomright' });
+
+      legendControl.onAdd = function () {
+        const div = L.DomUtil.create('div', 'price-legend');
+        div.innerHTML = buildLegendHtml(null, null);
+        legendControl._container = div;
+        L.DomEvent.disableClickPropagation(div);
+        return div;
+      };
+
+      legendControl.addTo(map);
+    }
+
+    function updateLegend(minPrice, maxPrice) {
+      if (!legendControl || !legendControl._container) return;
+      legendControl._container.innerHTML = buildLegendHtml(minPrice, maxPrice);
+    }
+
+    function initMap() {
+      if (map) return;
+
+      map = L.map('map', {
+        zoomControl: true
+      }).setView([43.6532, -79.3832], 9);
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; OpenStreetMap contributors'
+      }).addTo(map);
+
+      routeLayer = L.polyline([], {
+        color: '#01696f',
+        weight: 5,
+        opacity: 0.85
+      }).addTo(map);
+
+      stationLayer = L.layerGroup().addTo(map);
+
+      initLegend();
+    }
+
+    function clearMapLayers() {
+      if (!map) return;
+
+      routeLayer.setLatLngs([]);
+      stationLayer.clearLayers();
+
+      if (startMarker) {
+        map.removeLayer(startMarker);
+        startMarker = null;
+      }
+
+      if (endMarker) {
+        map.removeLayer(endMarker);
+        endMarker = null;
+      }
+    }
+
+    function renderMap(payload) {
+      initMap();
+      clearMapLayers();
+
+      const coords = payload?.route?.geometry?.coordinates || [];
+      const latLngs = coords.map(([lng, lat]) => [lat, lng]);
+
+      if (latLngs.length) {
+        routeLayer.setLatLngs(latLngs);
+      }
+
+      const origin = payload.origin;
+      const destination = payload.destination;
+
+      if (origin?.lat && origin?.lng) {
+        startMarker = L.marker([origin.lat, origin.lng], {
+          icon: createEndpointIcon('Start', '#1565c0')
+        }).addTo(map).bindPopup(`<strong>Start</strong><br>${origin.displayName || 'Origin'}`);
+      }
+
+      if (destination?.lat && destination?.lng) {
+        endMarker = L.marker([destination.lat, destination.lng], {
+          icon: createEndpointIcon('End', '#6a1b9a')
+        }).addTo(map).bindPopup(`<strong>End</strong><br>${destination.displayName || 'Destination'}`);
+      }
+
+      const fuelType = els.fuelType.value;
+      const priceValues = (payload.stations || [])
+        .map(s => s.prices?.[fuelType])
+        .filter(v => v != null);
+
+      const minPrice = priceValues.length ? Math.min(...priceValues) : null;
+      const maxPrice = priceValues.length ? Math.max(...priceValues) : null;
+
+      updateLegend(minPrice, maxPrice);
+
+      for (const station of payload.stations || []) {
+        const value = station.prices?.[fuelType];
+        const tier = getPriceTier(value, minPrice, maxPrice);
+
+        const marker = L.marker([station.lat, station.lng], {
+          icon: createStationIcon(value, minPrice, maxPrice)
+        });
+
+        marker.bindPopup(`
+          <strong>${station.name || 'Station'}</strong><br>
+          ${station.brand ? `${station.brand}<br>` : ''}
+          Tier: ${getTierLabel(tier)}<br>
+          Distance from start: ${fmtNum(station.distanceFromStartKm, 2)} km<br>
+          Distance from route: ${fmtInt(station.distanceFromRouteMeters)} m<br>
+          ${fuelType}: ${value == null ? '-' : fmtNum(value, 3)}
+        `, { maxWidth: 260 });
+
+        marker.addTo(stationLayer);
+      }
+
+      const bounds = [];
+      latLngs.forEach(p => bounds.push(p));
+      if (origin?.lat && origin?.lng) bounds.push([origin.lat, origin.lng]);
+      if (destination?.lat && destination?.lng) bounds.push([destination.lat, destination.lng]);
+
+      if (bounds.length) {
+        map.fitBounds(bounds, { padding: [30, 30] });
+      }
+
+      setTimeout(() => map.invalidateSize(), 50);
+    }
+
+    function renderStats(payload) {
+      const stations = payload.stations || [];
+      const fuelType = els.fuelType.value;
+      const prices = stations.map(s => s.prices?.[fuelType]).filter(v => v != null);
+      const min = prices.length ? Math.min(...prices) : null;
+      const max = prices.length ? Math.max(...prices) : null;
+      const avg = prices.length ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
+
+      els.stats.innerHTML = `
+        <div class="stat"><span class="k">Route distance</span><span class="v">${fmtNum((payload.route.distanceMeters || 0) / 1000)} km</span></div>
+        <div class="stat"><span class="k">Route duration</span><span class="v">${formatDuration(payload.route.durationSeconds || 0)}</span></div>
+        <div class="stat"><span class="k">Stations found</span><span class="v">${stations.length}</span></div>
+        <div class="stat"><span class="k">Lowest ${fuelType}</span><span class="v">${min == null ? '-' : fmtNum(min, 3)}</span></div>
+        <div class="stat"><span class="k">Average ${fuelType}</span><span class="v">${avg == null ? '-' : fmtNum(avg, 3)}</span></div>
+        <div class="stat"><span class="k">Highest ${fuelType}</span><span class="v">${max == null ? '-' : fmtNum(max, 3)}</span></div>
+      `;
+    }
+
+    function renderTable(payload) {
+      const rows = payload.stations || [];
+      els.tableBody.innerHTML = rows.map((s, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${s.name || '-'}</td>
+          <td>${s.brand || '-'}</td>
+          <td>${fmtNum(s.distanceFromStartKm, 2)}</td>
+          <td>${fmtInt(s.distanceFromRouteMeters)}</td>
+          <td>${s.prices?.gasoline == null ? '-' : fmtNum(s.prices.gasoline, 3)}</td>
+          <td>${s.prices?.diesel == null ? '-' : fmtNum(s.prices.diesel, 3)}</td>
+          <td>${s.prices?.lpg == null ? '-' : fmtNum(s.prices.lpg, 3)}</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderChart(payload) {
+      const fuelType = els.fuelType.value;
+      const x = payload.chart?.x || [];
+      const y = payload.chart?.y || [];
+      const text = payload.chart?.text || [];
+
+      const trace = {
+        x,
+        y,
+        text,
+        type: 'scatter',
+        mode: 'lines+markers',
+        line: { color: '#01696f', width: 2 },
+        marker: { color: '#0c4e54', size: 8 },
+        hovertemplate: 'Distance: %{x:.2f} km<br>Price: %{y:.3f}<br>%{text}<extra></extra>'
+      };
+
+      const layout = {
+        title: `${fuelType[0].toUpperCase() + fuelType.slice(1)} prices vs. route distance`,
+        paper_bgcolor: '#ffffff',
+        plot_bgcolor: '#ffffff',
+        margin: { t: 50, r: 20, b: 60, l: 60 },
+        xaxis: { title: 'Distance from start (km)' },
+        yaxis: { title: `${fuelType} price` }
+      };
+
+      Plotly.newPlot(els.chart, [trace], layout, {
+        responsive: true,
+        displayModeBar: true
+      });
+    }
+
+    async function run() {
+      els.error.textContent = '';
+      els.status.textContent = 'Loading route and fuel prices...';
+      els.runBtn.disabled = true;
+
+      try {
+        const payload = {
+          origin: els.origin.value.trim(),
+          destination: els.destination.value.trim(),
+          sampleKm: Number(els.sampleKm.value || 7),
+          fuelType: els.fuelType.value
+        };
+
+        const res = await fetch('/api/fuel-along-route', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          throw new Error(data.error || 'Request failed');
+        }
+
+        renderStats(data);
+        renderMap(data);
+        renderTable(data);
+        renderChart(data);
+
+        els.status.textContent = `Loaded ${data.stations.length} stations from ${payload.origin} to ${payload.destination}.`;
+      } catch (err) {
+        els.error.textContent = err.message;
+        els.status.textContent = '';
+      } finally {
+        els.runBtn.disabled = false;
+      }
+    }
+
+    els.runBtn.addEventListener('click', run);
+    window.addEventListener('load', () => {
+      initMap();
+      run();
+    });
+  </script>
+</body>
+</html>
